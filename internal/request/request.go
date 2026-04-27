@@ -1,9 +1,9 @@
 package request
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
 )
 
@@ -25,29 +25,58 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		return nil, err
 	}
 
-	reqLine, err := parseRequestLine(string(data))
+	reqLine, err := parseRequestLine(data)
 	if err != nil {
 		return nil, err
 	}
 	return &Request{RequestLine: *reqLine}, nil
 }
 
-func parseRequestLine(input string) (*RequestLine, error) {
-	msg := strings.Split(input, "\r\n")
-	parts := strings.Split(msg[0], " ")
+func parseRequestLine(data []byte) (*RequestLine, error) {
+	idx := bytes.Index(data, []byte(crlf))
+	if idx == -1 {
+		return nil, fmt.Errorf("no CRLF found in requesst line")
+	}
 
+	reqLine, err := requestLineFromString(string(data[:idx]))
+	if err != nil {
+		return nil, err
+	}
+	return reqLine, nil
+}
+
+func requestLineFromString(str string) (*RequestLine, error) {
+	parts := strings.Split(str, ` `)
 	if len(parts) != 3 {
-		return &RequestLine{}, fmt.Errorf("invalid number of fields in request line: %d", len(parts))
+		return nil, fmt.Errorf("invalid request line format: %s", str)
 	}
 
-	var reqLine RequestLine
-	reqLine.Method = parts[0]
-	reqLine.RequestTarget = parts[1]
-	reqLine.HttpVersion = parts[2]
-
-	var validMethod = regexp.MustCompile(`^[A-Z]+$`)
-	if !validMethod.MatchString(reqLine.Method) || reqLine.HttpVersion != "HTTP/1.1" {
-		return &RequestLine{}, fmt.Errorf("invalid request line: %s", input)
+	method := parts[0]
+	for _, c := range method {
+		if c < 'A' || c > 'Z' {
+			return nil, fmt.Errorf("invalid method: %s", method)
+		}
 	}
-	return &reqLine, nil
+
+	requestTarget := parts[1]
+
+	versionParts := strings.Split(parts[2], "/")
+	if len(versionParts) != 2 {
+		return nil, fmt.Errorf("malformed start-line: %s", str)
+	}
+
+	httpPart := versionParts[0]
+	if httpPart != "HTTP" {
+		return nil, fmt.Errorf("unrecognized HTTP-version: %s", httpPart)
+	}
+	version := versionParts[1]
+	if version != "1.1" {
+		return nil, fmt.Errorf("unrecognized HTTP-version: %s", version)
+	}
+
+	return &RequestLine{
+		Method:        method,
+		RequestTarget: requestTarget,
+		HttpVersion:   versionParts[1],
+	}, nil
 }
