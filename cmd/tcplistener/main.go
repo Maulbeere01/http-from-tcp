@@ -1,12 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"strings"
+
+	"httpfromtcp/internal/request"
 )
 
 const port = ":42069"
@@ -25,51 +24,10 @@ func main() {
 			log.Fatalf("error: %s\n", err.Error())
 		}
 		fmt.Printf("connection: %s accepted\n", conn.RemoteAddr())
-		ch := getLinesChannel(conn)
-		for line := range ch {
-			fmt.Printf("read: %s\n", line)
+		r, err := request.RequestFromReader(conn)
+		if err != nil {
+			log.Fatalf("error: %s\n", err.Error())
 		}
-		fmt.Println("connection: ", conn.RemoteAddr(), "closed")
+		fmt.Printf("Request line:\n- Method: %s\n- Target: %s\n- Version: %s\n", r.RequestLine.Method, r.RequestLine.RequestTarget, r.RequestLine.HttpVersion)
 	}
-}
-
-func getLinesChannel(s io.ReadCloser) <-chan string {
-	stringChannel := make(chan string)
-
-	go func() {
-		defer s.Close()
-		defer close(stringChannel)
-
-		buffer := make([]byte, 8)
-		var sb strings.Builder
-
-		for {
-			n, err := s.Read(buffer)
-
-			lines := strings.Split(string(buffer[:n]), "\n")
-			numLines := len(lines)
-
-			sb.WriteString(lines[0])
-
-			if numLines > 1 {
-				stringChannel <- sb.String()
-
-				for i := 1; i < numLines-1; i++ {
-					stringChannel <- lines[i]
-				}
-				sb.Reset()
-				sb.WriteString(lines[numLines-1])
-			}
-
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					if sb.Len() > 0 {
-						stringChannel <- sb.String()
-					}
-				}
-				break
-			}
-		}
-	}()
-	return stringChannel
 }
