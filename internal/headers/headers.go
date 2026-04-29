@@ -30,14 +30,29 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	}
 
 	fieldName := data[:idx]
-	for _, c := range fieldName {
-		if c == ' ' {
-			return 0, false, fmt.Errorf("invalid header format: %s", fieldName)
-		}
+	if !isValidFieldName(string(fieldName)) {
+		return 0, false, fmt.Errorf("invalid header name: %s", fieldName)
 	}
 
 	fieldValue := bytes.TrimSpace(data[idx+1 : lineEnd])
+
 	h[strings.ToLower(string(fieldName))] = string(fieldValue)
 
 	return lineEnd + 2, false, nil
+}
+
+func isValidFieldName(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if !isValidChar(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidChar(c byte) bool {
+	return (c >= 'A' && c <= 'Z') ||
+		(c >= 'a' && c <= 'z') ||
+		(c >= '0' && c <= '9') ||
+		(c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~')
 }
