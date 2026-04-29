@@ -52,7 +52,7 @@ func TestRequestHeaderParse(t *testing.T) {
 
 	// Test: valid done
 	headers = NewHeaders()
-	data = []byte("\r\n")
+	data = []byte("\r\n other stuff")
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	assert.Equal(t, 2, n)
@@ -74,14 +74,15 @@ func TestRequestHeaderParse(t *testing.T) {
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
 
-	// Test: Case-insensitive duplicate header
-	headers = NewHeaders()
-	headers["content-type"] = "text/plain"
-	data = []byte("Content-Type: application/json\r\n\r\n")
+	// Test: Valid 2 headers with existing headers
+	headers = map[string]string{"host": "localhost:42069"}
+	data = []byte("User-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n")
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
-	assert.Equal(t, "application/json", headers["content-type"])
-	assert.Equal(t, 1, len(headers))
+	require.NotNil(t, headers)
+	assert.Equal(t, "localhost:42069", headers["host"])
+	assert.Equal(t, "curl/7.81.0", headers["user-agent"])
+	assert.Equal(t, 25, n)
 	assert.False(t, done)
 
 	// Test: Invalid char in field-name
@@ -90,5 +91,16 @@ func TestRequestHeaderParse(t *testing.T) {
 	n, done, err = headers.Parse(data)
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
+	assert.False(t, done)
+
+	// Test: Same Header Key
+	headers = NewHeaders()
+	headers["host"] = "old-value:9999"
+	data = []byte("Host: localhost:42069\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "old-value:9999, localhost:42069", headers["host"])
+	assert.Equal(t, 23, n)
 	assert.False(t, done)
 }
