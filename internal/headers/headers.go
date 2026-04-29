@@ -36,9 +36,18 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
 	fieldValue := bytes.TrimSpace(data[idx+1 : lineEnd])
 
-	h[strings.ToLower(string(fieldName))] = string(fieldValue)
+	h.Set(string(fieldName), string(fieldValue))
 
 	return lineEnd + 2, false, nil
+}
+
+func (h Headers) Set(key string, value string) {
+	key = strings.ToLower(key)
+	v, ok := h[key]
+	if ok {
+		value = v + ", " + value
+	}
+	h[key] = value
 }
 
 func isValidFieldName(s string) bool {
@@ -54,5 +63,7 @@ func isValidChar(c byte) bool {
 	return (c >= 'A' && c <= 'Z') ||
 		(c >= 'a' && c <= 'z') ||
 		(c >= '0' && c <= '9') ||
-		(c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~')
+		(c == '!' || c == '#' || c == '$' || c == '%' || c == '&' ||
+			c == '\'' || c == '*' || c == '+' || c == '-' || c == '.' ||
+			c == '^' || c == '_' || c == '`' || c == '|' || c == '~')
 }
