@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"httpfromtcp/internal/headers"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -17,13 +18,15 @@ type parserState int
 const (
 	stateInitialized parserState = iota
 	requestStateParsingHeaders
+	requestStateParsingBody
 	stateDone
 )
 
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
-	state       parserState
+	State       parserState
+	Body        []byte
 }
 
 type RequestLine struct {
@@ -37,11 +40,11 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	readToIndex := 0
 
 	r := &Request{
-		state:   stateInitialized,
+		State:   stateInitialized,
 		Headers: headers.NewHeaders(),
 	}
 
-	for r.state != stateDone {
+	for r.State != stateDone {
 		if readToIndex >= len(buf) {
 			newBuf := make([]byte, len(buf)*2)
 			copy(newBuf, buf)
@@ -55,8 +58,8 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				if r.state != stateDone {
-					return nil, fmt.Errorf("incomplete request, in state: %d, read n bytes on EOF: %d", r.state, n)
+				if r.State != stateDone {
+					return nil, fmt.Errorf("incomplete request, in state: %d, read n bytes on EOF: %d", r.State, n)
 				}
 			}
 			return nil, err
@@ -76,7 +79,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 func (r *Request) parse(data []byte) (int, error) {
 	totalBytesParsed := 0
-	for r.state != stateDone {
+	for r.State != stateDone {
 		n, err := r.parseSingle(data[totalBytesParsed:])
 		if err != nil {
 			return 0, err
@@ -90,7 +93,7 @@ func (r *Request) parse(data []byte) (int, error) {
 }
 
 func (r *Request) parseSingle(data []byte) (int, error) {
-	switch r.state {
+	switch r.State {
 	case stateInitialized:
 		reqLine, bytesRead, err := parseRequestLine(data)
 		if err != nil {
@@ -100,7 +103,7 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, nil // need more data
 		}
 		r.RequestLine = *reqLine
-		r.state = requestStateParsingHeaders
+		r.State = requestStateParsingHeaders
 		return bytesRead, nil
 	case requestStateParsingHeaders:
 		bytesRead, done, err := r.Headers.Parse(data)
@@ -109,9 +112,38 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		}
 
 		if done {
-			r.state = stateDone
+			r.State = requestStateParsingBody
 		}
 		return bytesRead, nil
+	case requestStateParsingBody:
+		contentLength := r.Headers.Get("Content-Length")
+		if contentLength == "" {
+			r.State = stateDone
+			return 0, nil
+		}
+		totalExpected, err := strconv.Atoi(contentLength)
+		if err != nil {
+			return 0, fmt.Errorf("error: trying to convert content length into integer")
+		}
+
+		remaining := totalExpected - len(r.Body)
+		bytesToCopy := len(data)
+
+		if bytesToCopy > remaining {
+			bytesToCopy = remaining
+		}
+
+		r.Body = append(r.Body, data[:bytesToCopy]...)
+
+		if len(r.Body) > totalExpected {
+			return 0, fmt.Errorf("error: body length greater than content-length")
+		}
+
+		if len(r.Body) == totalExpected {
+			r.State = stateDone
+		}
+
+		return bytesToCopy, nil
 	case stateDone:
 		return 0, fmt.Errorf("error: trying to read data in a done state")
 	default:

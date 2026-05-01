@@ -67,3 +67,7 @@ func isValidChar(c byte) bool {
 			c == '\'' || c == '*' || c == '+' || c == '-' || c == '.' ||
 			c == '^' || c == '_' || c == '`' || c == '|' || c == '~')
 }
+
+func (h Headers) Get(key string) string {
+	return h[strings.ToLower(key)]
+}
