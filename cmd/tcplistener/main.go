@@ -28,6 +28,10 @@ func main() {
 		if err != nil {
 			log.Fatalf("error: %s\n", err.Error())
 		}
-		fmt.Printf("Request line:\n- Method: %s\n- Target: %s\n- Version: %s\n", r.RequestLine.Method, r.RequestLine.RequestTarget, r.RequestLine.HttpVersion)
+		fmt.Printf("Request line:\n- Method: %s\n- Target: %s\n- Version: %s\nHeaders:\n",
+			r.RequestLine.Method, r.RequestLine.RequestTarget, r.RequestLine.HttpVersion)
+		for key, value := range r.Headers {
+			fmt.Printf("- %s: %s\n", key, value)
+		}
 	}
 }
